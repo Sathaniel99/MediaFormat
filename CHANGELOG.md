@@ -6,6 +6,17 @@ La version sigue [SemVer](https://semver.org/lang/es/).
 Regla: todo fix o feature anota aqui su cambio **antes** de compilar.
 La decision de subir version (y con ello crear una entrada nueva) es del usuario.
 
+## [1.0.0] - 2026-11-15
+
+Primera versión estable de MediaFormat. Recoge todo lo publicado en 0.2.1 y el
+pulido final de la interfaz.
+
+### Changed
+
+- La ventana se abre siempre centrada (salvo maximizada), ignorando cualquier
+  posición guardada por versiones anteriores y compensando el borde nativo de
+  Windows.
+
 ## [0.2.1] - 2026-11-15
 
 ### Added

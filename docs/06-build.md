@@ -163,6 +163,7 @@ py -3.14 -m venv .venv
 | `0.2.0` | 2026-11-15 | `dist\MediaFormat-0.2.0.exe` | 43.5 MB | ventana | Fase 4 completa, icono definitivo (variante C); ventana, icono, metadatos y PNG → JPEG verificados |
 | `0.2.0` (`-Onedir`) | 2026-11-15 | `dist\MediaFormat-0.2.0\MediaFormat-0.2.0.exe` | 3.2 MB (105.7 MB bundle) | ventana | build de comparación; ventana verificada |
 | `0.2.1` | 2026-11-15 | `dist\MediaFormat-0.2.1.exe` | 43.5 MB | ventana | fixes de UI: selects, engranaje, ventana al 70 %, calidad en el panel de conversión, salida de solo lectura y cola como drop target; arranque verificado |
+| `1.0.0` | 2026-11-15 | `dist\MediaFormat-1.0.0.exe` | 43.5 MB | ventana | primera versión estable: ventana centrada con borde nativo compensado; arranque verificado (delta de centro 0,5 px en X, 0 px en Y); SHA-256 `6BC1C68A…85BBF5` |
 
 `dist\build_info.json` se genera con el hash SHA-256 del ejecutable. `build/` y
 `dist/` están en `.gitignore`; el `.exe` se regenera, no se versiona.

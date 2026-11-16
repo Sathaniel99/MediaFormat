@@ -9,15 +9,15 @@
 |---|---|
 | Proyecto | MediaFormat — conversor de imágenes de escritorio |
 | Fase actual | **Fases 1–4 completadas** |
-| Versión | `0.2.1` (`app/version.py`) |
+| Versión | `1.0.0` (`app/version.py`) |
 | Python | 3.14.2 (`.venv` local) |
 | Qt | PySide6-Essentials 6.12.0 |
 | Imagen | Pillow 12.3.0 (WebP ✅, AVIF ✅) |
-| Empaquetado | PyInstaller 6.22.3 (build 0.2.1 onefile validado, 43.5 MB) |
+| Empaquetado | PyInstaller 6.22.3 (build 1.0.0 onefile validado, 43.5 MB) |
 | Lint | ruff 0.17.4 |
 | Tests | 126, `unittest`, verdes, ~14 s (34 de UI en `offscreen`) |
 | Red | **No disponible** (`pypi.org:443` no responde) |
-| Git | Todavía no es repositorio |
+| Git | Repositorio `Sathaniel99/MediaFormat`, rama `main`, remoto `origin` |
 
 ## Rutas reales en este equipo
 
@@ -72,6 +72,9 @@
   conversión, salida de solo lectura y cola como drop target. La ventana se abre
   siempre centrada (salvo maximizada): la posición guardada se ignora y el
   centrado compensa el borde invisible de Windows.
+- Build **1.0.0** validado (`dist\MediaFormat-1.0.0.exe`, 43.5 MB, onefile):
+  primera versión estable, centrado real medido (0,5 px en X y 0 px en Y) y
+  release publicado en GitHub con el ejecutable adjunto.
 - Documentación `docs/01`–`docs/07`, ADRs 0001–0003 y esta guía.
 
 ## Qué falta
