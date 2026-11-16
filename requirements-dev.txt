@@ -1,0 +1,9 @@
+-r requirements.txt
+
+# Desarrollo
+ruff==0.17.4
+pyinstaller==6.22.3
+pyinstaller-hooks-contrib==2026.10
+
+# Pendiente (requiere red): pytest
+# pytest==8.4.2

@@ -1,0 +1,31 @@
+[project]
+name = "mediaformat"
+version = "0.2.1"
+description = "Conversor de imagenes con UI de escritorio (Python + Qt + Pillow)"
+readme = "README.md"
+requires-python = ">=3.13"
+dependencies = [
+    "Pillow==12.3.0",
+    "PySide6-Essentials==6.12.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pyinstaller==6.22.3",
+    "pyinstaller-hooks-contrib==2026.10",
+    "ruff==0.17.4",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py313"
+src = ["app", "tests", "scripts"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM"]
+ignore = ["E741"]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+line-ending = "lf"

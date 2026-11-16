@@ -1,0 +1,11 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "instructions": [
+    "docs/agents/context.md",
+    "docs/agents/README.md",
+    "docs/02-architecture.md"
+  ],
+  "watcher": {
+    "ignore": [".venv/**", "wheels/**", "build/**", "dist/**", "__pycache__/**", ".ruff_cache/**"]
+  }
+}

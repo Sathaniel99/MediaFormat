@@ -1,0 +1,6 @@
+# Runtime
+Pillow==12.3.0
+PySide6-Essentials==6.12.0
+
+# Nota: la UI usa solo QtCore/QtGui/QtWidgets, por eso Essentials es suficiente
+# (no hace falta PySide6-Addons ni WebEngine).
