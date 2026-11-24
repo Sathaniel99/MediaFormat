@@ -48,7 +48,9 @@ detecta el formato real al abrir.
 | TIFF | `compression="tiff_lzw"` |
 | GIF/BMP/ICO/TGA | valores por defecto de Pillow |
 
-Metadatos: EXIF se pasa a JPEG/PNG/WEBP/AVIF; ICC a JPEG/PNG/WEBP/TIFF/AVIF. Si
+Metadatos: EXIF se pasa a JPEG/PNG/WEBP/AVIF (también en animaciones); ICC a
+JPEG/PNG/WEBP/TIFF/AVIF. Al aplicar orientación se eliminan los bytes EXIF
+originales antes de reinyectarlos, para que los visores no roten dos veces. Si
 Pillow rechaza los metadatos, se reintenta sin ellos y se añade una nota al
 resultado (nunca se pierde la conversión por un EXIF raro).
 
@@ -69,7 +71,10 @@ resultado (nunca se pierde la conversión por un EXIF raro).
 | `overwrite` | Reemplaza el destino existente |
 | `skip` | No hace nada y devuelve `SKIPPED` |
 
-Nunca se escribe sobre el archivo de origen, ni siquiera con `overwrite`.
+Nunca se escribe sobre el archivo de origen, ni siquiera con `overwrite`. En un
+lote, los destinos se reservan con un bloqueo antes de escribir: dos archivos
+con el mismo nombre no pueden acabar en el mismo destino. Si falla una escritura
+ya iniciada, se borra el archivo parcial para no dejar una salida corrupta.
 
 ## Errores y notas
 

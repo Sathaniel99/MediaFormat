@@ -9,15 +9,15 @@
 |---|---|
 | Proyecto | MediaFormat — conversor de imágenes de escritorio |
 | Fase actual | **Fases 1–4 completadas** |
-| Versión | `1.0.0` (`app/version.py`) |
+| Versión | `1.0.1` (`app/version.py`), build local validado; release pública sigue en 1.0.0 |
 | Python | 3.14.2 (`.venv` local) |
 | Qt | PySide6-Essentials 6.12.0 |
 | Imagen | Pillow 12.3.0 (WebP ✅, AVIF ✅) |
 | Empaquetado | PyInstaller 6.22.3 (build 1.0.0 onefile validado, 43.5 MB) |
 | Lint | ruff 0.17.4 |
-| Tests | 126, `unittest`, verdes, ~14 s (34 de UI en `offscreen`) |
-| Red | **No disponible** (`pypi.org:443` no responde) |
-| Git | Repositorio `Sathaniel99/MediaFormat`, rama `main`, remoto `origin` |
+| Tests | 154, `unittest`, verdes, ~2 min (43 de UI en `offscreen`) |
+| Red | Disponible (GitHub API y PyPI responden); `wheels/` sigue permitiendo trabajar offline |
+| Git | Repo público `Sathaniel99/MediaFormat`, `main` = `origin/main` en `7ded330`, tag `v1.0.0`, release 1.0.0 publicada |
 
 ## Rutas reales en este equipo
 
@@ -75,6 +75,14 @@
 - Build **1.0.0** validado (`dist\MediaFormat-1.0.0.exe`, 43.5 MB, onefile):
   primera versión estable, centrado real medido (0,5 px en X y 0 px en Y) y
   release publicado en GitHub con el ejecutable adjunto.
+- Build **1.0.1** validado (`dist\MediaFormat-1.0.1.exe`, 43.5 MB, onefile):
+  28 arreglos de motor/UI, 154 tests verdes y smoke test PNG → WebP desde el
+  `.exe` (exit 0). Build local, sin release ni publicación (no se publica sin
+  pedirlo).
+- Auditoría del motor y la UI: reserva atómica de destinos, EXIF orientado una
+  sola vez, limpieza de salidas parciales, progreso al cancelar, validación del
+  `.ini`, CLI respetando `--conflict`/`recursive_folders`, Ajustes creando la
+  carpeta de salida, resumen por lote y `QThread` liberado. 28 tests nuevos.
 - Documentación `docs/01`–`docs/07`, ADRs 0001–0003 y esta guía.
 
 ## Qué falta
@@ -82,9 +90,9 @@
 | Tarea | Dónde |
 |---|---|
 | Revisión visual fina (espaciados, contraste) | `app/ui/theme.py`, `docs/05-ui.md` |
-| `git init` + primer commit | Solo si el usuario lo pide |
-| HEIC/HEIF | Requiere `pillow-heif` (no disponible offline) |
-| Funciones de pago | `De_pago.txt` (solo ideas, nada implementado) |
+| HEIC/HEIF | Requiere `pillow-heif`; hay red, pero aún no está en `wheels/` ni se añadió la dependencia |
+| Licencia, topics, descripción y CI del repo | Metadata remota: decidir con el usuario antes de tocarla |
+| Funciones de pago | `De_pago.txt` (local, ignorado por git; solo ideas, nada implementado) |
 
 ## Decisiones vigentes
 
@@ -113,6 +121,10 @@
 - **PySide6 meta-package**: desinstalarlo elimina `PySide6/__init__.py`; si se
   reinstala Essentials, usar `--force-reinstall --no-deps`.
 - **`ruff format` y `line-ending`**: el proyecto usa LF; no mezclar CRLF.
+- **`expand_path`**: un `%VAR%` sin definir lanza `ValueError`; así no se crea
+  una carpeta literal en el directorio de trabajo.
+- **Tests de UI**: la suite tarda ~86 s en `offscreen`; no bajar los timeouts
+  para «acelerarla».
 
 ## Cómo verificar que el entorno sigue sano
 

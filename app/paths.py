@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import ctypes
 import os
+import re
 import subprocess
 import sys
 import tempfile
@@ -101,11 +102,28 @@ def config_path() -> Path:
 
 
 def expand_path(value: str | os.PathLike[str]) -> Path:
-    """Expand ``%VARS%``, ``~`` and surrounding quotes, then return a Path."""
+    """Expand ``%VARS%``, ``~`` and surrounding quotes, then return a Path.
+
+    Unresolved ``%VARIABLE%`` placeholders are an error: leaving them literal
+    would create an unexpected directory in the current working directory.
+    """
     raw = str(value).strip()
     if len(raw) >= 2 and raw[0] == raw[-1] and raw[0] in "\"'":
         raw = raw[1:-1]
-    return Path(os.path.expandvars(os.path.expanduser(raw)))
+    expanded = os.path.expandvars(os.path.expanduser(raw))
+    missing = re.search(r"%([^%]+)%", expanded)
+    if missing:
+        raise ValueError(f"variable de entorno no definida: {missing.group(0)}")
+    return Path(expanded)
+
+
+def path_key(path: Path | str) -> str:
+    """Case-insensitive key to compare destination paths safely."""
+    candidate = Path(path)
+    try:
+        return str(candidate.resolve()).lower()
+    except OSError:
+        return str(candidate).lower()
 
 
 def ensure_dir(path: Path) -> Path:
@@ -127,14 +145,14 @@ def is_writable_dir(path: Path, create: bool = False) -> bool:
         return False
 
 
-def unique_path(path: Path) -> Path:
-    """Return ``path`` or ``name_1.ext``, ``name_2.ext``... if it already exists."""
-    if not path.exists():
+def unique_path(path: Path, reserved: set[str] | None = None) -> Path:
+    """Return ``path`` or ``name_1.ext``... if it exists or is ``reserved``."""
+    if not path.exists() and (reserved is None or path_key(path) not in reserved):
         return path
     stem, suffix = path.stem, path.suffix
     for index in range(1, 10_000):
         candidate = path.with_name(f"{stem}_{index}{suffix}")
-        if not candidate.exists():
+        if not candidate.exists() and (reserved is None or path_key(candidate) not in reserved):
             return candidate
     raise FileExistsError(f"no free file name for {path}")
 

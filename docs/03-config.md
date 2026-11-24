@@ -37,7 +37,7 @@
 | `language` | `es\|en` | `es` | Idioma de la interfaz |
 | `notify_on_finish` | bool | `true` | Notificación nativa al terminar un lote |
 | `restore_queue` | bool | `true` | Recuperar la lista al volver a abrir |
-| `version` | entero | `2` | Versión del esquema del archivo |
+| `version` | entero | `2` | Versión del esquema del archivo; si no coincide se repara y se avisa |
 
 `accent` elige la paleta de acento (botones primarios, sliders, progreso,
 toggles y selección) tanto en tema claro como oscuro. `system` lee el color de
@@ -62,7 +62,9 @@ bandeja disponible, se ignora sin error. `restore_queue` controla la cola de
 | `on_conflict` | `rename\|overwrite\|skip` | `rename` | Qué hacer si el destino existe |
 
 `folder` por defecto se resuelve con `SHGetKnownFolderPath(FOLDERID_Documents)`,
-no concatenando `%USERPROFILE%\Documents`. Eso cubre OneDrive.
+no concatenando `%USERPROFILE%\Documents`. Eso cubre OneDrive. Una variable
+`%VARIABLE%` sin definir se repara al valor por defecto y genera un aviso en el
+banner; así no se crea una carpeta literal en el directorio de trabajo.
 
 ### `[format]`
 
@@ -140,7 +142,7 @@ el `.ini`: viven en `app/profiles.py` y no se pueden borrar.
 `Config.conversion_options(fmt)` aplica:
 
 - `quality`: `[jpeg].quality` para JPEG; `[webp].quality` para WEBP/AVIF.
-- `lossless`: solo WEBP/AVIF, desde `[webp].lossless`.
+- `lossless`: solo WEBP, desde `[webp].lossless` (AVIF usa `quality`).
 - `background`: `[jpeg].background` (se usa al convertir a JPEG/BMP/GIF).
 - `on_conflict`, `keep_metadata`, `apply_exif_orientation`, `animated`,
   `png_compress_level` y `jpeg_subsampling` desde sus secciones.

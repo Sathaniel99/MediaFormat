@@ -41,7 +41,7 @@ class ToggleSwitch(QAbstractButton):
         self.setCursor(Qt.CursorShape.PointingHandCursor)
         self.setFixedSize(42, 24)
         self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
-        self.setAccessibleName("Alternar")
+        self.setAccessibleName(tr("toggle.accessible"))
         self._accent = QColor("#0067C0")
         self._track = QColor("#C8C8C8")
         self._knob_position = 0.0

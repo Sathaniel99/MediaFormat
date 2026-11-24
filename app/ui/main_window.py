@@ -150,6 +150,7 @@ class MainWindow(QMainWindow):
         self.progress_bar.setRange(0, 1)
         self.progress_bar.setValue(0)
         self.progress_bar.setTextVisible(False)
+        self.progress_bar.setAccessibleName(tr("progress.accessible"))
         self.progress_bar.setFixedHeight(6)
         self.progress_bar.setVisible(False)
         outer.addWidget(self.progress_bar)
@@ -229,12 +230,14 @@ class MainWindow(QMainWindow):
         self.banner_label.setWordWrap(True)
         self.banner_details = QPushButton(tr("banner.view"), banner)
         self.banner_details.setObjectName("Ghost")
+        self.banner_details.setAccessibleName(tr("banner.view"))
         self.banner_details.setCursor(Qt.CursorShape.PointingHandCursor)
         self.banner_close = QPushButton(banner)
         self.banner_close.setObjectName("IconButton")
         self.banner_close.setFixedSize(28, 28)
         self.banner_close.setIconSize(QSize(14, 14))
         self.banner_close.setToolTip(tr("banner.close"))
+        self.banner_close.setAccessibleName(tr("banner.close"))
         self.banner_close.setCursor(Qt.CursorShape.PointingHandCursor)
 
         layout.addWidget(self.banner_icon)
@@ -276,6 +279,7 @@ class MainWindow(QMainWindow):
 
         self.model = FileListModel(self)
         self.table = FileTable(card)
+        self.table.setAccessibleName(tr("table.accessible"))
         self.table.setModel(self.model)
         self.table.setItemDelegateForColumn(COLUMN_PREVIEW, ThumbnailDelegate(self.table))
         self._status_delegate = StatusDelegate(self.table, dark=self.colors.dark)
@@ -551,7 +555,6 @@ class MainWindow(QMainWindow):
 
     def _save_config(self) -> None:
         try:
-            self.config.theme = self.config.theme
             text = self.output_edit.text().strip()
             if text:
                 self.config.output_folder = expand_path(text)
@@ -727,6 +730,7 @@ class MainWindow(QMainWindow):
             return
         key = self.profile_combo.currentData()
         if not key:
+            self._revert_profile()
             return
         profile = next((item for item in self._profiles if item.key == key), None)
         if profile is None:
@@ -734,7 +738,35 @@ class MainWindow(QMainWindow):
         self._apply_profile(profile)
         self.status_label.setText(tr("profile.applied", name=profile_label(profile, tr)))
 
+    def _revert_profile(self) -> None:
+        """Restore the format/quality that was active before the first profile."""
+        state = getattr(self, "_profile_snapshot", None)
+        if state is None:
+            return
+        fmt = state["format"]
+        self._quality_cache[fmt] = state["quality"]
+        index = self.format_combo.findData(fmt.value)
+        if index >= 0:
+            self.format_combo.setCurrentIndex(index)
+        self.lossless_toggle.setChecked(state["lossless"])
+        self.animated_toggle.setChecked(state["animated"])
+        self.config.jpeg_subsampling = state["subsampling"]
+        self.config.png_compress_level = state["compress"]
+        self._profile_snapshot = None
+        self._on_format_changed()
+        self.status_label.setText(tr("profile.none"))
+
     def _apply_profile(self, profile: Profile) -> None:
+        if getattr(self, "_profile_snapshot", None) is None:
+            previous = self._current_format()
+            self._profile_snapshot = {
+                "format": previous,
+                "quality": self._quality_cache.get(self._quality_key(previous), 95),
+                "lossless": self.lossless_toggle.isChecked(),
+                "animated": self.animated_toggle.isChecked(),
+                "subsampling": self.config.jpeg_subsampling,
+                "compress": self.config.png_compress_level,
+            }
         fmt = profile.output_format
         self._quality_cache[self._quality_key(fmt)] = profile.quality
         index = self.format_combo.findData(fmt.value)
@@ -766,7 +798,7 @@ class MainWindow(QMainWindow):
             label_key=f"profile.custom.{name}",
             output_format=fmt,
             quality=self._current_quality(),
-            lossless=self.lossless_toggle.isChecked(),
+            lossless=fmt is OutputFormat.WEBP and self.lossless_toggle.isChecked(),
             animated=self.animated_toggle.isChecked(),
             jpeg_subsampling=self.config.jpeg_subsampling,
             png_compress_level=self.config.png_compress_level,
@@ -811,10 +843,13 @@ class MainWindow(QMainWindow):
 
     # ----------------------------------------------------------------- settings
     def _open_settings(self) -> None:
+        quality_cache = dict(self._quality_cache)
         dialog = SettingsDialog(self.config, self)
         if dialog.exec() != SettingsDialog.DialogCode.Accepted:
             return
         self._apply_config_to_widgets()
+        self._quality_cache.update(quality_cache)
+        self._on_format_changed()
         self._apply_theme()
         self._refresh_banner()
         self._load_profiles()
@@ -924,7 +959,10 @@ class MainWindow(QMainWindow):
         rows = self._selected_rows()
         if not rows:
             return
+        paths = [item.path for item in (self.model.item_at(row) for row in rows) if item]
         self.model.remove_rows(rows)
+        for path in paths:
+            self.thumbnails.forget(path)
         self._summary = ""
         self._update_count()
         self._update_actions()
@@ -991,7 +1029,7 @@ class MainWindow(QMainWindow):
             self._set_quality_value(self._quality_cache.get(self._quality_key(fmt), 95))
         self.quality_combo.setEnabled(has_quality and not self.lossless_toggle.isChecked())
 
-        has_lossless = fmt in (OutputFormat.WEBP, OutputFormat.AVIF)
+        has_lossless = fmt is OutputFormat.WEBP
         self.lossless_toggle.setVisible(has_lossless)
         self.lossless_label.setVisible(has_lossless)
         self.animated_toggle.setEnabled(fmt.supports_animation and not self._running)
@@ -1075,6 +1113,8 @@ class MainWindow(QMainWindow):
             self.model.reset_rows(rows)
         else:
             self.model.reset_batch()
+            rows = self.model.rows_matching(selected)
+        self.model.set_status(rows, JobStatus.RUNNING)
 
         self._batch_sources = {str(Path(path).resolve()).lower() for path in selected}
         self._set_running(True)
@@ -1097,6 +1137,7 @@ class MainWindow(QMainWindow):
         self._worker.finished.connect(self._thread.quit)
         self._worker.failed.connect(self._thread.quit)
         self._thread.finished.connect(self._worker.deleteLater)
+        self._thread.finished.connect(self._thread.deleteLater)
         self._thread.finished.connect(self._on_thread_finished)
         self._thread.start()
         LOGGER.info("conversion iniciada: %s archivos -> %s", len(selected), output_dir)
@@ -1161,10 +1202,9 @@ class MainWindow(QMainWindow):
         )
 
     def _on_finished(self, results: list) -> None:
-        counts = self.model.status_counts()
-        done = counts[JobStatus.DONE]
-        skipped = counts[JobStatus.SKIPPED]
-        errors = counts[JobStatus.ERROR]
+        done = sum(1 for result in results if result.status is JobStatus.DONE)
+        skipped = sum(1 for result in results if result.status is JobStatus.SKIPPED)
+        errors = sum(1 for result in results if result.status is JobStatus.ERROR)
         self.progress_bar.setValue(len(results))
         self._summary = tr("status.summary", done=done, skipped=skipped, errors=errors)
         self.status_label.setText(self._summary)
@@ -1180,12 +1220,21 @@ class MainWindow(QMainWindow):
         self._notify_finished(done, errors)
 
     def _on_failed(self, message: str) -> None:
+        running_rows = [
+            row
+            for row in range(self.model.rowCount())
+            if (item := self.model.item_at(row)) is not None and item.status is JobStatus.RUNNING
+        ]
+        self.model.set_status(running_rows, JobStatus.PENDING)
         self._batch_sources = set()
         self._set_running(False)
         self.status_label.setText(tr("status.conversion_failed"))
         QMessageBox.critical(self, tr("dialog.conversion_failed.title"), message)
 
     def _on_thread_finished(self) -> None:
+        sender = self.sender()
+        if sender is not None and sender is not self._thread:
+            return
         self._worker = None
         self._thread = None
         if self._closing:
@@ -1292,8 +1341,7 @@ class MainWindow(QMainWindow):
         return ConversionOptions(
             output_format=fmt,
             quality=self._current_quality(),
-            lossless=self.lossless_toggle.isChecked()
-            and fmt in (OutputFormat.WEBP, OutputFormat.AVIF),
+            lossless=self.lossless_toggle.isChecked() and fmt is OutputFormat.WEBP,
             background=self.config.jpeg_background,
             keep_metadata=self.config.keep_metadata,
             apply_exif_orientation=self.config.apply_exif_orientation,

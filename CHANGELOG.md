@@ -6,6 +6,32 @@ La version sigue [SemVer](https://semver.org/lang/es/).
 Regla: todo fix o feature anota aqui su cambio **antes** de compilar.
 La decision de subir version (y con ello crear una entrada nueva) es del usuario.
 
+## [1.0.1] - 2026-11-24
+
+### Fixed
+
+- Motor: dos conversiones concurrentes con el mismo nombre de destino ya no se
+  pisan; los destinos se reservan con un bloqueo antes de escribir.
+- Motor: la orientación EXIF no se aplica dos veces; se conservan los metadatos
+  de animaciones y se borra el archivo parcial si falla una escritura.
+- Motor: el progreso cubre también los archivos cancelados antes de empezar y una
+  cancelación a mitad de lote ya no lanza `CancelledError`.
+- Configuración: se valida la versión del esquema y las rutas con variables de
+  entorno sin definir; los fallbacks de calidad son 95 y `lossless` solo se
+  aplica a WebP.
+- CLI: `--conflict` y `[processing].recursive_folders` se respetan de verdad.
+- UI: Ajustes crea la carpeta de salida si falta; el resumen cuenta solo el lote
+  actual; se muestran las filas «Convirtiendo»; se libera el `QThread` al terminar
+  y se olvidan las miniaturas al quitar filas.
+- UI: «Sin perfil» restaura el formato y la calidad anteriores, la calidad de la
+  sesión sobrevive a Ajustes y los nombres accesibles están traducidos.
+- Logging: `setup_logging(level=...)` actualiza el nivel en llamadas repetidas.
+
+### Added
+
+- 28 tests de regresión para motor, rutas, modelos, configuración, CLI, logging
+  e UI (154 en total).
+
 ## [1.0.0] - 2026-11-15
 
 Primera versión estable de MediaFormat. Recoge todo lo publicado en 0.2.1 y el

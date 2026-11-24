@@ -102,6 +102,8 @@ def _handle_convert(args: argparse.Namespace) -> int:
     options.animated = bool(args.animated) or options.animated
     options.keep_metadata = not args.no_metadata
     options.apply_exif_orientation = not args.no_orientation
+    if args.conflict is not None:
+        options.on_conflict = ConflictPolicy.from_value(args.conflict)
     options = options.normalized()
 
     output_dir = Path(args.out) if args.out else settings.output_folder
@@ -109,7 +111,8 @@ def _handle_convert(args: argparse.Namespace) -> int:
         print(f"ERROR: la carpeta de salida no es escribible: {output_dir}", file=sys.stderr)
         return 2
 
-    sources = collect_sources(args.inputs, recursive=not args.no_recursive)
+    recursive = settings.recursive_folders if not args.no_recursive else False
+    sources = collect_sources(args.inputs, recursive=recursive)
     if not sources:
         print("ERROR: no se encontraron imagenes en la entrada", file=sys.stderr)
         return 2

@@ -26,6 +26,7 @@ from app.ui.convert_worker import ConvertWorker  # noqa: E402
 from app.ui.file_model import FileListModel  # noqa: E402
 from app.ui.theme import resolve_colors  # noqa: E402
 from PIL import Image  # noqa: E402 - despues de fijar el backend de Qt
+from PySide6.QtCore import QThread  # noqa: E402
 from PySide6.QtWidgets import QApplication  # noqa: E402
 
 _APP = QApplication.instance() or QApplication([])
@@ -422,6 +423,122 @@ class MainWindowTest(unittest.TestCase):
         self.assertEqual(counts[JobStatus.DONE], 2)
         self.assertIn("2 convertidas", self.window.status_label.text())
         self.assertEqual(len(list((self.root / "salida").glob("*.webp"))), 2)
+
+    def test_settings_dialog_can_create_the_output_folder(self) -> None:
+        from app.ui.settings_dialog import SettingsDialog
+
+        target = self.root / "nueva" / "salida"
+        dialog = SettingsDialog(self.config, self.window)
+        dialog.output_edit.setText(os.fspath(target))
+        with mock.patch("app.ui.settings_dialog.QMessageBox.warning") as warning:
+            dialog.accept()
+
+        warning.assert_not_called()
+        self.assertEqual(dialog.result(), SettingsDialog.DialogCode.Accepted)
+        self.assertEqual(self.config.output_folder, target)
+        self.assertTrue(target.is_dir())
+
+    def test_summary_counts_only_the_results_of_the_batch(self) -> None:
+        from app.models import ConversionResult
+
+        image = make_image(self.root / "previo.png")
+        self.window._add_paths([image])  # noqa: SLF001
+        self.window.model.set_status([0], JobStatus.ERROR)
+
+        with mock.patch.object(self.window, "_notify_finished"):  # noqa: SLF001
+            self.window._on_finished([ConversionResult(image, JobStatus.DONE)])  # noqa: SLF001
+
+        self.assertIn("1 convertidas · 0 omitidas · 0 errores", self.window.status_label.text())
+
+    def test_conversion_marks_rows_running_and_releases_the_thread(self) -> None:
+        image = make_image(self.root / "hilo.png")
+        self.window._add_paths([image])  # noqa: SLF001
+        self.window._start_conversion()  # noqa: SLF001
+
+        item = self.window.model.item_at(0)
+        assert item is not None
+        self.assertIs(item.status, JobStatus.RUNNING)
+
+        deadline = time.monotonic() + 20
+        while self.window._running and time.monotonic() < deadline:  # noqa: SLF001
+            _APP.processEvents()
+            time.sleep(0.02)
+        for _ in range(10):
+            _APP.processEvents()
+
+        self.assertFalse(self.window._running)  # noqa: SLF001
+        self.assertIsNone(self.window._thread)  # noqa: SLF001
+        self.assertEqual(self.window.findChildren(QThread), [])
+
+    def test_removing_rows_forgets_their_thumbnails(self) -> None:
+        image = make_image(self.root / "miniatura.png")
+        self.window._add_paths([image])  # noqa: SLF001
+        self.window.thumbnails.wait_for_done(5000)
+        key = str(image).lower()
+        self.assertIn(key, self.window.thumbnails._requested)  # noqa: SLF001
+
+        self.window.table.selectRow(0)
+        _APP.processEvents()
+        self.window._remove_selected()  # noqa: SLF001
+
+        self.assertNotIn(key, self.window.thumbnails._requested)  # noqa: SLF001
+        self.window._add_paths([image])  # noqa: SLF001
+        self.assertIn(key, self.window.thumbnails._requested)  # noqa: SLF001
+
+    def test_quality_selected_in_the_session_survives_settings(self) -> None:
+        self.window.quality_combo.addItem(tr("quality.custom", value=82), 82)
+        self.window.quality_combo.setCurrentIndex(self.window.quality_combo.count() - 1)
+        self.assertEqual(self.window._quality_cache[OutputFormat.WEBP], 82)  # noqa: SLF001
+
+        with mock.patch("app.ui.main_window.SettingsDialog.exec", return_value=1):
+            self.window._open_settings()  # noqa: SLF001
+        self.assertEqual(self.window._current_quality(), 82)  # noqa: SLF001
+
+    def test_no_profile_restores_the_previous_format_and_quality(self) -> None:
+        initial_format = self.window._current_format()  # noqa: SLF001
+        initial_quality = self.window._current_quality()  # noqa: SLF001
+
+        index = self.window.profile_combo.findData("social")
+        self.window.profile_combo.setCurrentIndex(index)
+        _APP.processEvents()
+        self.assertEqual(self.window._current_format(), OutputFormat.JPEG)  # noqa: SLF001
+
+        self.window.profile_combo.setCurrentIndex(self.window.profile_combo.findData(""))
+        _APP.processEvents()
+        self.assertEqual(self.window._current_format(), initial_format)  # noqa: SLF001
+        self.assertEqual(self.window._current_quality(), initial_quality)  # noqa: SLF001
+
+    def test_failed_conversion_restores_running_rows(self) -> None:
+        image = make_image(self.root / "fallida.png")
+        self.window._add_paths([image])  # noqa: SLF001
+        self.window.model.set_status([0], JobStatus.RUNNING)
+
+        with mock.patch("app.ui.main_window.QMessageBox.critical"):
+            self.window._on_failed("fallo de prueba")  # noqa: SLF001
+
+        item = self.window.model.item_at(0)
+        assert item is not None
+        self.assertIs(item.status, JobStatus.PENDING)
+
+    def test_accessible_names_are_translated(self) -> None:
+        from app.ui.widgets import ToggleSwitch
+
+        toggle = ToggleSwitch(self.window)
+        self.assertEqual(toggle.accessibleName(), tr("toggle.accessible"))
+        self.assertEqual(self.window.table.accessibleName(), tr("table.accessible"))
+        self.assertEqual(self.window.progress_bar.accessibleName(), tr("progress.accessible"))
+        self.assertEqual(self.window.banner_details.accessibleName(), tr("banner.view"))
+        self.assertEqual(self.window.banner_close.accessibleName(), tr("banner.close"))
+
+    def test_lossless_is_only_available_for_webp(self) -> None:
+        index = self.window.format_combo.findData(OutputFormat.AVIF.value)
+        self.window.format_combo.setCurrentIndex(index)
+        self.window.lossless_toggle.setChecked(True)
+        _APP.processEvents()
+
+        self.assertTrue(self.window.lossless_toggle.isHidden())
+        self.assertTrue(self.window.lossless_label.isHidden())
+        self.assertFalse(self.window._current_options().lossless)  # noqa: SLF001
 
 
 if __name__ == "__main__":

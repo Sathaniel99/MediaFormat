@@ -11,6 +11,7 @@ from app.paths import (
     expand_path,
     format_size,
     is_writable_dir,
+    path_key,
     unique_path,
 )
 
@@ -43,6 +44,20 @@ class PathsTest(unittest.TestCase):
 
     def test_expand_path_strips_quotes(self) -> None:
         self.assertEqual(expand_path(f'"{self.root}"'), self.root)
+
+    def test_expand_path_rejects_an_undefined_variable(self) -> None:
+        name = "MF_TEST_UNDEFINED_VAR"
+        os.environ.pop(name, None)
+        with self.assertRaises(ValueError):
+            expand_path(f"%{name}%/salida")
+
+    def test_unique_path_respects_reserved_destinations(self) -> None:
+        target = self.root / "foto.png"
+        reserved = {path_key(target)}
+        self.assertEqual(unique_path(target, reserved).name, "foto_1.png")
+        reserved.add(path_key(self.root / "foto_1.png"))
+        self.assertEqual(unique_path(target, reserved).name, "foto_2.png")
+        self.assertFalse(any(self.root.glob("foto*.png")))
 
     def test_format_size(self) -> None:
         self.assertEqual(format_size(0), "0 B")

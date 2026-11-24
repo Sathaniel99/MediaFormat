@@ -39,6 +39,23 @@ class ModelsTest(unittest.TestCase):
         self.assertEqual(raw.jpeg_subsampling, "4:2:0")
         self.assertIs(raw.on_conflict, ConflictPolicy.SKIP)
 
+    def test_normalized_tolerates_invalid_types(self) -> None:
+        raw = ConversionOptions(
+            output_format="no-es-un-formato",  # type: ignore[arg-type]
+            quality="abc",  # type: ignore[arg-type]
+            png_compress_level=None,  # type: ignore[arg-type]
+            background="rojo",  # type: ignore[arg-type]
+            jpeg_subsampling=None,  # type: ignore[arg-type]
+            on_conflict="explode",  # type: ignore[arg-type]
+        ).normalized()
+
+        self.assertIs(raw.output_format, OutputFormat.WEBP)
+        self.assertEqual(raw.quality, 90)
+        self.assertEqual(raw.png_compress_level, 6)
+        self.assertEqual(raw.background, (255, 255, 255))
+        self.assertEqual(raw.jpeg_subsampling, "4:2:0")
+        self.assertIs(raw.on_conflict, ConflictPolicy.RENAME)
+
     def test_result_ok_flag(self) -> None:
         from pathlib import Path
 

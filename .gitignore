@@ -16,6 +16,14 @@ __pycache__/
 build/
 dist/
 *.spec
+*.exe
+
+# Secretos y credenciales (nunca versionar)
+.env
+*.pem
+*.pfx
+*.key
+token*.txt
 
 # Editores / sistema
 .idea/

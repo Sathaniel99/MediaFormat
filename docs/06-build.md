@@ -76,21 +76,23 @@ SemVer aplicado a este proyecto:
 ```json
 {
   "app": "MediaFormat",
-  "version": "0.2.0",
-  "built_at": "2026-11-15T12:55:34-05:00",
+  "version": "1.0.1",
+  "built_at": "2026-11-24T14:39:01-05:00",
   "python": "3.14.2",
-  "commit": "n/a",
+  "commit": "7ded330",
   "windowed": true,
   "mode": "onefile",
-  "exe": "dist/MediaFormat-0.2.0.exe",
+  "exe": "dist/MediaFormat-1.0.1.exe",
   "size_mb": 43.5,
   "bundle_mb": 43.5,
-  "sha256": "…"
+  "sha256": "6C58CF5E4CFA06058C1B3C5A1EE1B1353CD9402D0FC0ED44D6245345E2FA76BE"
 }
 ```
 
 `size_mb` es el `.exe`; `bundle_mb` suma toda la carpeta en modo `onedir`.
-`commit` queda en `n/a` hasta que el proyecto sea un repo git.
+`commit` es el `HEAD` al compilar. Si el bump de versión estaba sin commitear,
+puede apuntar al commit anterior (pasó en 1.0.0: `ebb14db`); el número de
+versión del ejecutable lo decide `app/version.py`, no el hash.
 
 ## Parámetros
 
@@ -134,8 +136,9 @@ crea el bootloader, no el proceso lanzado.
 
 ## Entorno
 
-- **Sin red**: todas las dependencias están en `wheels/` y ya instaladas en
-  `.venv`. Reconstruir el entorno:
+- **Sin red (opcional)**: todas las dependencias están en `wheels/` y ya
+  instaladas en `.venv`. Hoy hay red, pero el build sigue funcionando sin ella.
+  Reconstruir el entorno:
 
 ```powershell
 py -3.14 -m venv .venv
@@ -164,9 +167,15 @@ py -3.14 -m venv .venv
 | `0.2.0` (`-Onedir`) | 2026-11-15 | `dist\MediaFormat-0.2.0\MediaFormat-0.2.0.exe` | 3.2 MB (105.7 MB bundle) | ventana | build de comparación; ventana verificada |
 | `0.2.1` | 2026-11-15 | `dist\MediaFormat-0.2.1.exe` | 43.5 MB | ventana | fixes de UI: selects, engranaje, ventana al 70 %, calidad en el panel de conversión, salida de solo lectura y cola como drop target; arranque verificado |
 | `1.0.0` | 2026-11-15 | `dist\MediaFormat-1.0.0.exe` | 43.5 MB | ventana | primera versión estable: ventana centrada con borde nativo compensado; arranque verificado (delta de centro 0,5 px en X, 0 px en Y); SHA-256 `6BC1C68A…85BBF5` |
+| `1.0.1` | 2026-11-24 | `dist\MediaFormat-1.0.1.exe` | 43.5 MB | ventana | 28 arreglos de motor/UI y 154 tests verdes; smoke test PNG → WebP desde el `.exe` (exit 0); SHA-256 `6C58CF5E…A76BE`; build local, no publicado |
 
 `dist\build_info.json` se genera con el hash SHA-256 del ejecutable. `build/` y
 `dist/` están en `.gitignore`; el `.exe` se regenera, no se versiona.
+
+La release de GitHub `v1.0.0` adjunta el mismo binario con el nombre
+`MediaFormat-V1.0.0.exe` (la `V` es solo del asset). El tag y el ejecutable
+**no están firmados**; si se quiere firma digital habrá que decidirlo por
+separado.
 
 ## Antes de publicar (checklist)
 
@@ -175,4 +184,5 @@ py -3.14 -m venv .venv
 - [ ] `build_info.json` con la versión correcta.
 - [ ] Ejecutable probado a doble clic en una carpeta limpia.
 - [ ] Conversión real de al menos 5 archivos desde el `.exe`.
+- [ ] Si se publica: tag, nombre del asset y SHA-256 verificados en GitHub.
 - [ ] El `.exe` **no** se copia fuera de `dist/` sin pedirlo al usuario.

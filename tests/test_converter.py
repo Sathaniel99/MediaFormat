@@ -3,6 +3,7 @@ from __future__ import annotations
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 from app.converter import (
     BatchConverter,
@@ -15,9 +16,11 @@ from app.models import (
     BatchProgress,
     ConflictPolicy,
     ConversionOptions,
+    ConversionResult,
     JobStatus,
     OutputFormat,
 )
+from app.paths import path_key
 from PIL import Image
 
 
@@ -259,6 +262,113 @@ class ConverterTest(unittest.TestCase):
 
     def test_batch_empty_input(self) -> None:
         self.assertEqual(BatchConverter(self.outbox, self.options()).run([]), [])
+
+    def test_exif_orientation_is_not_applied_twice(self) -> None:
+        source = self.inbox / "rotada.jpg"
+        image = Image.new("RGB", (10, 20), (0, 128, 0))
+        exif = Image.Exif()
+        exif[0x0112] = 6
+        image.save(source, "JPEG", exif=exif)
+
+        result = convert_file(source, self.outbox, self.options(OutputFormat.JPEG))
+
+        self.assertEqual(result.status, JobStatus.DONE, result.error)
+        with Image.open(result.output) as converted:  # type: ignore[arg-type]
+            self.assertEqual(converted.size, (20, 10))
+            self.assertIsNone(converted.getexif().get(0x0112))
+
+    def test_reserved_destination_forces_a_renamed_target(self) -> None:
+        first = self.make_image("uno.png")
+        second = self.inbox / "uno.jpg"
+        Image.new("RGB", (32, 16), (10, 20, 30)).save(second)
+        reserved: set[str] = set()
+
+        first_target, first_skip = build_output_path(
+            first, self.outbox, OutputFormat.WEBP, ConflictPolicy.RENAME, reserved
+        )
+        second_target, second_skip = build_output_path(
+            second, self.outbox, OutputFormat.WEBP, ConflictPolicy.RENAME, reserved
+        )
+
+        self.assertEqual((first_target.name, first_skip), ("uno.webp", False))
+        self.assertEqual((second_target.name, second_skip), ("uno_1.webp", False))
+
+    def test_reserved_destination_is_skipped_with_the_skip_policy(self) -> None:
+        source = self.make_image("uno.png")
+        reserved = {path_key(self.outbox / "uno.webp")}
+        _, skip = build_output_path(
+            source, self.outbox, OutputFormat.WEBP, ConflictPolicy.SKIP, reserved
+        )
+        self.assertTrue(skip)
+
+    def test_batch_does_not_lose_concurrent_destinations(self) -> None:
+        png = self.make_image("igual.png")
+        jpg = self.inbox / "igual.jpg"
+        Image.new("RGB", (32, 16), (10, 20, 30)).save(jpg)
+
+        converter = BatchConverter(self.outbox, self.options(OutputFormat.WEBP), max_workers=2)
+        results = converter.run([png, jpg])
+
+        names = {result.output.name for result in results if result.status is JobStatus.DONE}
+        self.assertEqual(names, {"igual.webp", "igual_1.webp"})
+        self.assertEqual(len(list(self.outbox.glob("*.webp"))), 2)
+
+    def test_batch_reports_progress_for_precancelled_files(self) -> None:
+        sources = [self.make_image("a.png"), self.make_image("b.png")]
+        converter = BatchConverter(self.outbox, self.options())
+        converter.cancel()
+        events: list[BatchProgress] = []
+
+        results = converter.run(sources, on_progress=events.append)
+
+        self.assertTrue(all(result.status is JobStatus.SKIPPED for result in results))
+        self.assertEqual([event.done for event in events], [1, 2])
+        self.assertEqual([event.total for event in events], [2, 2])
+
+    def test_cancelling_mid_batch_returns_results_without_raising(self) -> None:
+        sources = [self.make_image(f"{index}.png") for index in range(3)]
+        converter = BatchConverter(self.outbox, self.options(), max_workers=1)
+        events: list[BatchProgress] = []
+
+        def cancel_on_first_file(*_args: object, **_kwargs: object) -> ConversionResult:
+            converter.cancel()
+            return ConversionResult(source=sources[0], status=JobStatus.DONE)
+
+        with mock.patch("app.converter.convert_file", side_effect=cancel_on_first_file):
+            results = converter.run(sources, on_progress=events.append)
+
+        self.assertEqual(len(results), 3)
+        self.assertEqual([event.done for event in events], [1, 2, 3])
+        self.assertEqual(results[0].status, JobStatus.DONE)
+        self.assertEqual(results[1].status, JobStatus.SKIPPED)
+        self.assertEqual(results[2].status, JobStatus.SKIPPED)
+
+    def test_failed_save_removes_the_partial_output(self) -> None:
+        source = self.make_image("parcial.png")
+
+        def broken_save(_image: Image.Image, fp: object, *_args: object, **_kwargs: object) -> None:
+            Path(fp).write_bytes(b"parcial")  # type: ignore[arg-type]
+            raise OSError("disco lleno")
+
+        with mock.patch.object(Image.Image, "save", broken_save):
+            result = convert_file(source, self.outbox, self.options(OutputFormat.PNG))
+
+        self.assertEqual(result.status, JobStatus.ERROR)
+        self.assertFalse((self.outbox / "parcial.png").exists())
+
+    def test_animated_conversion_keeps_exif(self) -> None:
+        source = self.inbox / "anim.webp"
+        frames = [Image.new("RGB", (16, 16), (value, 0, 0)) for value in (255, 120)]
+        exif = Image.Exif()
+        exif[0x010E] = "origen"
+        frames[0].save(source, "WEBP", save_all=True, append_images=frames[1:], exif=exif)
+
+        result = convert_file(source, self.outbox, self.options(OutputFormat.WEBP, animated=True))
+
+        self.assertEqual(result.status, JobStatus.DONE, result.error)
+        with Image.open(result.output) as converted:  # type: ignore[arg-type]
+            self.assertEqual(converted.n_frames, 2)
+            self.assertEqual(converted.getexif().get(0x010E), "origen")
 
 
 if __name__ == "__main__":

@@ -247,7 +247,7 @@ class Config:
 
     @property
     def jpeg_quality(self) -> int:
-        return self.get_int("jpeg", "quality", 92, 1, 100)
+        return self.get_int("jpeg", "quality", 95, 1, 100)
 
     @jpeg_quality.setter
     def jpeg_quality(self, value: int) -> None:
@@ -274,7 +274,7 @@ class Config:
 
     @property
     def webp_quality(self) -> int:
-        return self.get_int("webp", "quality", 90, 1, 100)
+        return self.get_int("webp", "quality", 95, 1, 100)
 
     @webp_quality.setter
     def webp_quality(self, value: int) -> None:
@@ -406,7 +406,7 @@ class Config:
         if quality is None:
             quality = self.jpeg_quality if fmt is OutputFormat.JPEG else self.webp_quality
         if lossless is None:
-            lossless = self.webp_lossless and fmt in (OutputFormat.WEBP, OutputFormat.AVIF)
+            lossless = self.webp_lossless and fmt is OutputFormat.WEBP
         return ConversionOptions(
             output_format=fmt,
             quality=quality,
@@ -442,8 +442,8 @@ class Config:
             self.set_value("format", "default", OutputFormat.WEBP.value)
 
         numeric = (
-            ("jpeg", "quality", 92, 1, 100),
-            ("webp", "quality", 90, 1, 100),
+            ("jpeg", "quality", 95, 1, 100),
+            ("webp", "quality", 95, 1, 100),
             ("png", "compress_level", 6, 0, 9),
             ("processing", "max_workers", 4, 1, 16),
         )
@@ -487,6 +487,26 @@ class Config:
                 self.warnings.append(f"[ui] {key}={raw!r} no numerico; se usa -1")
                 self.set_value("ui", key, -1)
 
+        raw_version = self.get("app", "version", str(SCHEMA_VERSION)).strip()
+        try:
+            version = int(raw_version)
+        except ValueError:
+            version = -1
+        if version != SCHEMA_VERSION:
+            self.warnings.append(
+                f"[app] version={raw_version!r} no compatible; se escribe {SCHEMA_VERSION}"
+            )
+            self.set_value("app", "version", SCHEMA_VERSION)
+
+        raw_folder = self.get("output", "folder").strip()
+        if raw_folder:
+            try:
+                expand_path(raw_folder)
+            except ValueError as exc:
+                self.warnings.append(
+                    f"[output] folder={raw_folder!r} invalido: {exc}; se usa el default"
+                )
+                self.output_folder = default_output_dir()
         if not self.get("output", "folder").strip():
             self.output_folder = default_output_dir()
 
@@ -569,7 +589,8 @@ window_maximized = {_as_bool(self.window_maximized)}
     def save(self) -> Path:
         """Atomically write the configuration and return its path."""
         self.path.parent.mkdir(parents=True, exist_ok=True)
-        temporary = self.path.with_suffix(self.path.suffix + ".tmp")
+        nonce = f"{os.getpid()}.{os.urandom(4).hex()}"
+        temporary = self.path.with_name(f"{self.path.name}.{nonce}.tmp")
         try:
             temporary.write_text(self.render(), encoding="utf-8", newline="\n")
             os.replace(temporary, self.path)

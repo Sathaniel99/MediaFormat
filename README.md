@@ -20,10 +20,24 @@ la interfaz.
 
 Sin argumentos, `main.py` abre la ventana; con un subcomando funciona la CLI.
 
+## Descargar
+
+La [release 1.0.0](https://github.com/Sathaniel99/MediaFormat/releases/tag/v1.0.0)
+publica `MediaFormat-V1.0.0.exe`. Es el mismo binario que
+`dist\MediaFormat-1.0.0.exe` (la `V` del asset es solo el nombre de subida):
+SHA-256 `6BC1C68A2A73FC0A0FB01BC00B1B0B09CECBF28B4E59E6C3A9EF057AAF85BBF5`.
+
+La versión `1.0.1` (28 arreglos, 154 tests verdes) ya compila como build local
+en `dist\MediaFormat-1.0.1.exe` (SHA-256
+`6C58CF5E4CFA06058C1B3C5A1EE1B1353CD9402D0FC0ED44D6245345E2FA76BE`), pero aún
+no tiene release pública.
+
 ## Instalación
 
 El proyecto ya incluye un `.venv` preparado y un repositorio local de wheels en
-`wheels/`, por lo que **no hace falta conexión** para reconstruir el entorno:
+`wheels/`, por lo que **no hace falta conexión** para reconstruir el entorno.
+Si hay red, también puedes clonar
+[`Sathaniel99/MediaFormat`](https://github.com/Sathaniel99/MediaFormat):
 
 ```powershell
 py -3.14 -m venv .venv
@@ -88,8 +102,9 @@ Opciones útiles: `--lossless`, `--animated`, `--conflict rename|overwrite|skip`
 .\.venv\Scripts\python.exe -m unittest discover -s tests -t .
 ```
 
-41 tests del motor + 12 de acentos + 9 de perfiles + 7 de cola + 8 de i18n +
-7 de recursos de build + 23 de UI en modo `offscreen` (115 en total), sin red.
+6 de modelos + 9 de rutas + 20 de configuración + 29 del motor + 3 de CLI +
+1 de logging + 12 de acentos + 9 de perfiles + 7 de cola + 8 de i18n +
+7 de recursos de build + 43 de UI en modo `offscreen` (154 en total).
 Ver `docs/07-testing.md`.
 
 ## Compilar
@@ -131,7 +146,7 @@ MediaFormat/
 ├── docs/                  documentación, ADRs y guía de agentes
 ├── resources/             icon.ico + propuestas en icon-variants/
 ├── scripts/               build.ps1, bump_version.py, make_icon*.py, make_version_info.py
-├── tests/                 unittest (115 tests)
+├── tests/                 unittest (154 tests)
 ├── wheels/                wheels offline (100 MB, no versionado)
 ├── CHANGELOG.md
 ├── config.example.ini
@@ -144,9 +159,10 @@ MediaFormat/
 ## Funciones de pago
 
 La app es gratuita y completa en su alcance actual. Las ideas reservadas para
-una futura edición de pago están en [De_pago.txt](De_pago.txt) (marca de agua,
-redimensionado por presets, edición previa, perfiles en la nube, IA, exportación
-profesional). Nada de eso está implementado ni bloquea funciones actuales.
+una futura edición de pago están en un archivo local (`De_pago.txt`, ignorado
+por git y por eso no publicado): marca de agua, redimensionado por presets,
+edición previa, perfiles en la nube, IA y exportación profesional. Nada de eso
+está implementado ni bloquea funciones actuales.
 
 ## Documentación
 

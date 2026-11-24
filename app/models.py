@@ -84,6 +84,14 @@ class JobStatus(StrEnum):
     SKIPPED = "skipped"
 
 
+def _clamped_int(value: object, default: int, minimum: int, maximum: int) -> int:
+    """Coerce a value to ``int`` and clamp it, falling back on invalid input."""
+    try:
+        return min(maximum, max(minimum, int(value)))  # type: ignore[arg-type]
+    except (TypeError, ValueError):
+        return default
+
+
 @dataclass(slots=True)
 class ConversionOptions:
     """Everything needed to convert one image, independent from the UI."""
@@ -102,21 +110,22 @@ class ConversionOptions:
     def normalized(self) -> ConversionOptions:
         """Return a copy with every value clamped to a safe range."""
         background = self.background
-        if not isinstance(background, (tuple, list)) or len(background) != 3:
-            background = (255, 255, 255)
-        background = tuple(min(255, max(0, int(channel))) for channel in background)
+        if isinstance(background, (tuple, list)) and len(background) == 3:
+            channels = tuple(_clamped_int(channel, 255, 0, 255) for channel in background)
+        else:
+            channels = (255, 255, 255)
         subsampling = str(self.jpeg_subsampling).strip()
         if subsampling not in ("4:4:4", "4:2:2", "4:2:0"):
             subsampling = "4:2:0"
         return ConversionOptions(
             output_format=OutputFormat.from_value(self.output_format, OutputFormat.WEBP),
-            quality=min(100, max(1, int(self.quality))),
+            quality=_clamped_int(self.quality, 90, 1, 100),
             lossless=bool(self.lossless),
-            background=background,  # type: ignore[arg-type]
+            background=channels,  # type: ignore[arg-type]
             keep_metadata=bool(self.keep_metadata),
             apply_exif_orientation=bool(self.apply_exif_orientation),
             animated=bool(self.animated),
-            png_compress_level=min(9, max(0, int(self.png_compress_level))),
+            png_compress_level=_clamped_int(self.png_compress_level, 6, 0, 9),
             jpeg_subsampling=subsampling,
             on_conflict=ConflictPolicy.from_value(self.on_conflict, ConflictPolicy.RENAME),
         )

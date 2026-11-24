@@ -5,8 +5,9 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from app.config import Config, default_values
+from app.config import SCHEMA_VERSION, Config, default_values
 from app.models import ConflictPolicy, OutputFormat
+from app.paths import default_output_dir
 
 
 class ConfigTest(unittest.TestCase):
@@ -181,11 +182,45 @@ class ConfigTest(unittest.TestCase):
         reloaded.remove_profile("mi-perfil")
         self.assertNotIn("mi-perfil", reloaded.profiles_raw)
 
+    def test_missing_quality_keys_use_the_documented_default(self) -> None:
+        config = Config(self.path, autoload=False)
+        config._data["jpeg"].pop("quality")  # noqa: SLF001 - ruta alternativa del getter
+        config._data["webp"].pop("quality")  # noqa: SLF001
+        self.assertEqual(config.jpeg_quality, 95)
+        self.assertEqual(config.webp_quality, 95)
+
+    def test_incompatible_schema_version_is_repaired(self) -> None:
+        self.path.write_text("[app]\nversion = 1\n", encoding="utf-8")
+        config = Config(self.path)
+
+        self.assertTrue(any("version" in warning for warning in config.warnings))
+        self.assertEqual(config.get("app", "version"), str(SCHEMA_VERSION))
+        config.save()
+        self.assertEqual(Config(self.path).warnings, [])
+
+    def test_undefined_variable_in_output_folder_is_repaired(self) -> None:
+        name = "MF_TEST_CONFIG_MISSING"
+        os.environ.pop(name, None)
+        self.path.write_text(f"[output]\nfolder = %{name}%/salida\n", encoding="utf-8")
+
+        config = Config(self.path)
+
+        self.assertTrue(any("folder" in warning for warning in config.warnings))
+        self.assertEqual(config.output_folder, default_output_dir())
+
+    def test_lossless_applies_only_to_webp(self) -> None:
+        config = Config(self.path)
+        config.webp_lossless = True
+
+        self.assertTrue(config.conversion_options(OutputFormat.WEBP).lossless)
+        self.assertFalse(config.conversion_options(OutputFormat.AVIF).lossless)
+
     def test_save_is_atomic_and_leaves_no_temp_file(self) -> None:
         config = Config(self.path)
         config.theme = "light"
         config.save()
         self.assertFalse(self.path.with_suffix(".ini.tmp").exists())
+        self.assertEqual(list(self.root.glob("config.ini*.tmp")), [])
 
 
 if __name__ == "__main__":

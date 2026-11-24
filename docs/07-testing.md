@@ -4,7 +4,8 @@
 
 - **Sin red**: los tests corren con `unittest` de la stdlib. Los del motor no
   necesitan Qt; los de UI fuerzan `QT_QPA_PLATFORM=offscreen`.
-- **Rápidos**: la suite completa tarda ~25 s (incluye la UI, la cola y el icono).
+- **Rápidos salvo la UI**: el motor acaba en ~2 s; la suite completa tarda
+  ~2 min porque 43 pruebas de UI corren en `offscreen`.
 - **Deterministas**: cada test usa su propio `TemporaryDirectory`.
 - **Aislados del usuario**: nunca leen ni escriben el `config.ini` real; siempre
   pasan una ruta temporal a `Config(path)`.
@@ -28,21 +29,23 @@ $py = ".\.venv\Scripts\python.exe"
 & $py -m unittest tests.test_converter.ConverterTest.test_alpha_is_flattened_for_jpeg -v
 ```
 
-Salida esperada: `Ran 126 tests ... OK`.
+Salida esperada: `Ran 154 tests ... OK`.
 
 ## Mapa de la suite
 
 | Archivo | Tests | Cubre |
 |---|---|---|
-| `tests/test_models.py` | 5 | Extensiones, capacidades, `from_value`, `normalized()`, `ConversionResult.ok` |
-| `tests/test_paths.py` | 7 | `unique_path`, `%VARS%`, comillas, tamaños, escritura, Documents |
-| `tests/test_config.py` | 16 | Creación, roundtrip, `#RRGGBB`, corrupción → `.bak`, valores inválidos, acento/idioma, posición de ventana, perfiles JSON y guardado atómico |
-| `tests/test_converter.py` | 21 | Formatos, recolección, conversión real, alfa, EXIF, colisiones, errores, animaciones, lotes y cancelación por archivo |
+| `tests/test_models.py` | 6 | Extensiones, capacidades, `from_value`, `normalized()` (incluidos tipos inválidos) y `ConversionResult.ok` |
+| `tests/test_paths.py` | 9 | `unique_path` con destinos reservados, `%VARS%` (incluida variable sin definir), comillas, tamaños, escritura y Documents |
+| `tests/test_config.py` | 20 | Creación, roundtrip, `#RRGGBB`, corrupción → `.bak`, esquema, rutas inválidas, valores reparados, acento/idioma, perfiles JSON y guardado atómico |
+| `tests/test_converter.py` | 29 | Formatos, conversión real, alfa, EXIF sin doble rotación, reserva de destinos, limpieza de parciales, progreso al cancelar, errores, animaciones y lotes |
+| `tests/test_cli.py` | 3 | `--conflict`, `recursive_folders` y `--no-recursive` sobre la configuración temporal |
+| `tests/test_logging.py` | 1 | El nivel se actualiza en llamadas repetidas sin duplicar handlers |
 | `tests/test_accents.py` | 12 | Nombres y etiquetas, normalización, acento `system`, paletas claro/oscuro y QSS resultante |
 | `tests/test_profiles.py` | 9 | Perfiles integrados, slugs, JSON, valores fuera de rango y perfiles personalizados |
 | `tests/test_queue_state.py` | 7 | Cola persistente, `RUNNING` → `PENDING`, archivos corruptos y guardado atómico |
 | `tests/test_i18n.py` | 8 | Diccionarios es/en, marcadores, idioma desconocido y paridad de claves |
-| `tests/test_ui.py` | 34 | Modelo de lista (reordenación, estados, fallidos), worker, ventana en `offscreen`, perfiles, banner, ajustes, cola como drop target, calidad, geometría al 70 % y centrado, reintentos, tema, acentos e icono |
+| `tests/test_ui.py` | 43 | Modelo de lista, worker, ventana en `offscreen`, resumen por lote, estado `RUNNING`, liberación de `QThread`, miniaturas, perfiles, ajustes, calidad de sesión, accesibilidad, geometría y tema |
 | `tests/test_build_assets.py` | 7 | Icono multi-resolución y metadatos de versión del `.exe` |
 
 ## Qué debe cubrir un cambio nuevo

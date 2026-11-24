@@ -10,11 +10,12 @@ Public API
 
 from __future__ import annotations
 
+import contextlib
 import logging
 import threading
 import time
 from collections.abc import Callable, Iterable, Sequence
-from concurrent.futures import ThreadPoolExecutor, as_completed
+from concurrent.futures import CancelledError, ThreadPoolExecutor, as_completed
 from pathlib import Path
 
 from PIL import Image, ImageOps, UnidentifiedImageError, features
@@ -27,7 +28,7 @@ from app.models import (
     JobStatus,
     OutputFormat,
 )
-from app.paths import ensure_dir, unique_path
+from app.paths import ensure_dir, path_key, unique_path
 
 LOGGER = logging.getLogger("mediaformat.converter")
 
@@ -95,8 +96,13 @@ def build_output_path(
     output_dir: Path,
     output_format: OutputFormat,
     policy: ConflictPolicy,
+    reserved: set[str] | None = None,
 ) -> tuple[Path, bool]:
-    """Return ``(target, should_skip)`` for a single conversion."""
+    """Return ``(target, should_skip)`` for a single conversion.
+
+    ``reserved`` holds destinations already claimed by other jobs in the same
+    batch; it prevents two workers from choosing the same file name.
+    """
     target = output_dir / f"{source.stem}{output_format.extension}"
     try:
         same_file = target.resolve() == source.resolve()
@@ -105,10 +111,17 @@ def build_output_path(
     if same_file:
         target = output_dir / f"{source.stem}_converted{output_format.extension}"
 
-    if policy is ConflictPolicy.SKIP and target.exists():
+    if reserved is not None and path_key(target) in reserved:
+        if policy is ConflictPolicy.SKIP:
+            return target, True
+        target = unique_path(target, reserved)
+    elif policy is ConflictPolicy.SKIP and target.exists():
         return target, True
-    if policy is ConflictPolicy.RENAME and target.exists():
-        target = unique_path(target)
+    elif policy is ConflictPolicy.RENAME and target.exists():
+        target = unique_path(target, reserved)
+
+    if reserved is not None:
+        reserved.add(path_key(target))
     return target, False
 
 
@@ -117,13 +130,15 @@ def convert_file(
     output_dir: Path | str,
     options: ConversionOptions,
     skip_check: Callable[[Path], bool] | None = None,
+    reserve_path: Callable[[Path], tuple[Path, bool]] | None = None,
 ) -> ConversionResult:
     """Convert ``source`` into ``output_dir``.
 
     ``skip_check`` lets the batch cancel a file that has not started yet: it is
     evaluated at the very beginning, so files already running finish normally.
-    File-level problems are returned as an ``ERROR`` result with a readable
-    message; only programming mistakes raise.
+    ``reserve_path`` atomically claims the destination inside a batch. File-level
+    problems are returned as an ``ERROR`` result with a readable message; only
+    programming mistakes raise.
     """
     source = Path(source)
     output_dir = Path(output_dir)
@@ -131,6 +146,8 @@ def convert_file(
     fmt = options.output_format
     started = time.perf_counter()
     size_in = 0
+    target: Path | None = None
+    target_existed = False
     notes: list[str] = []
 
     if skip_check is not None and skip_check(source):
@@ -161,7 +178,11 @@ def convert_file(
             raise FileNotFoundError(f"no existe: {source}")
         size_in = source.stat().st_size
 
-        target, should_skip = build_output_path(source, output_dir, fmt, options.on_conflict)
+        if reserve_path is not None:
+            target, should_skip = reserve_path(source)
+        else:
+            target, should_skip = build_output_path(source, output_dir, fmt, options.on_conflict)
+        target_existed = target.exists()
         if should_skip:
             notes.append("el archivo de salida ya existe")
             return finish(JobStatus.SKIPPED, output=target)
@@ -171,11 +192,11 @@ def convert_file(
         with Image.open(source) as opened:
             frame_count = int(getattr(opened, "n_frames", 1) or 1)
             icc_profile = opened.info.get("icc_profile") if options.keep_metadata else None
-            exif = opened.info.get("exif") if options.keep_metadata else None
+            source_exif = opened.info.get("exif") if options.keep_metadata else None
 
             if frame_count > 1 and options.animated and fmt.supports_animation:
                 frames_saved = _save_animated(
-                    opened, target, fmt, options, icc_profile, frame_count, notes
+                    opened, target, fmt, options, source_exif, icc_profile, frame_count, notes
                 )
             else:
                 if frame_count > 1:
@@ -183,14 +204,17 @@ def convert_file(
                     frames_saved = 1
                 else:
                     frames_saved = 1
-                image = _load_static(opened, options, notes)
-                _save_static(image, target, fmt, options, exif, icc_profile, notes)
+                image, static_exif = _load_static(opened, options, notes)
+                _save_static(image, target, fmt, options, static_exif, icc_profile, notes)
 
         size_out = target.stat().st_size
         LOGGER.info("convertido %s -> %s (%s -> %s)", source.name, target.name, size_in, size_out)
         return finish(JobStatus.DONE, output=target, size_out=size_out, frames=frames_saved)
 
     except Exception as exc:  # noqa: BLE001 - per-file isolation is a feature
+        if target is not None and not target_existed:
+            with contextlib.suppress(OSError):
+                target.unlink(missing_ok=True)
         LOGGER.warning("fallo al convertir %s: %s", source, exc)
         return finish(JobStatus.ERROR, error=_friendly_error(exc))
 
@@ -245,12 +269,34 @@ class BatchConverter:
         if total == 0:
             return []
 
+        reserved: set[str] = set()
+        reservation_lock = threading.Lock()
+        completed = 0
+
+        def reserve(source: Path) -> tuple[Path, bool]:
+            with reservation_lock:
+                return build_output_path(
+                    source,
+                    self.output_dir,
+                    self.options.output_format,
+                    self.options.on_conflict,
+                    reserved,
+                )
+
+        def report(result: ConversionResult) -> None:
+            nonlocal completed
+            completed += 1
+            if on_progress is not None:
+                on_progress(BatchProgress(completed, total, result))
+
         workers = min(self.max_workers, total)
         with ThreadPoolExecutor(max_workers=workers, thread_name_prefix="mf-convert") as pool:
             futures = {}
             for index, item in enumerate(items):
                 if self.is_file_cancelled(item):
-                    results[index] = _cancelled_result(item)
+                    result = _cancelled_result(item)
+                    results[index] = result
+                    report(result)
                     continue
                 futures[
                     pool.submit(
@@ -259,20 +305,27 @@ class BatchConverter:
                         self.output_dir,
                         self.options,
                         self.is_file_cancelled,
+                        reserve,
                     )
                 ] = index
 
-            for completed, future in enumerate(as_completed(futures), start=1):
+            for future in as_completed(futures):
                 index = futures[future]
-                results[index] = future.result()
-                if on_progress is not None:
-                    on_progress(BatchProgress(completed, total, results[index]))
+                try:
+                    result = future.result()
+                except CancelledError:
+                    result = _cancelled_result(items[index])
+                results[index] = result
+                report(result)
                 if self.cancelled:
                     for pending in futures:
                         pending.cancel()
 
         for index, item in enumerate(items):
-            results.setdefault(index, _cancelled_result(item))
+            if index not in results:
+                result = _cancelled_result(item)
+                results[index] = result
+                report(result)
         return [results[index] for index in range(total)]
 
 
@@ -293,7 +346,9 @@ def _cancelled_result(source: Path) -> ConversionResult:
     )
 
 
-def _load_static(opened: Image.Image, options: ConversionOptions, notes: list[str]) -> Image.Image:
+def _load_static(
+    opened: Image.Image, options: ConversionOptions, notes: list[str]
+) -> tuple[Image.Image, bytes | None]:
     image = opened
     try:
         image.load()
@@ -306,7 +361,18 @@ def _load_static(opened: Image.Image, options: ConversionOptions, notes: list[st
         except Exception:  # noqa: BLE001 - bad EXIF must not abort the conversion
             notes.append("orientacion EXIF no aplicable")
 
-    return _prepare_image(image, options.output_format, options)
+    # exif_transpose already removes the Orientation tag from the returned
+    # image; reusing the original bytes would rotate the pixels twice.
+    exif_bytes: bytes | None = None
+    if options.keep_metadata:
+        try:
+            exif = image.getexif()
+            if exif:
+                exif_bytes = exif.tobytes()
+        except Exception:  # noqa: BLE001 - metadata must not abort conversion
+            notes.append("EXIF no aplicable")
+
+    return _prepare_image(image, options.output_format, options), exif_bytes
 
 
 def _prepare_image(
@@ -377,6 +443,7 @@ def _save_animated(
     target: Path,
     fmt: OutputFormat,
     options: ConversionOptions,
+    exif: bytes | None,
     icc_profile: bytes | None,
     frame_count: int,
     notes: list[str],
@@ -399,13 +466,20 @@ def _save_animated(
     if fmt is OutputFormat.GIF:
         kwargs["optimize"] = False
         kwargs["disposal"] = 2
-    if icc_profile and fmt in _ICC_FORMATS:
-        kwargs["icc_profile"] = icc_profile
+    if options.keep_metadata:
+        if exif and fmt in _METADATA_FORMATS:
+            kwargs["exif"] = exif
+        if icc_profile and fmt in _ICC_FORMATS:
+            kwargs["icc_profile"] = icc_profile
 
     try:
         frames[0].save(target, fmt.value, **kwargs)
     except (TypeError, ValueError) as exc:
-        kwargs.pop("icc_profile", None)
+        dropped = [key for key in ("exif", "icc_profile") if key in kwargs]
+        for key in dropped:
+            kwargs.pop(key, None)
+        if not dropped:
+            raise
         frames[0].save(target, fmt.value, **kwargs)
         notes.append(f"metadatos omitidos ({exc})")
 

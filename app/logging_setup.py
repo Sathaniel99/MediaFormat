@@ -17,6 +17,7 @@ def setup_logging(level: int = logging.INFO, log_file: Path | None = None) -> lo
     """Configure the app logger once and return it."""
     logger = logging.getLogger(LOGGER_NAME)
     if logger.handlers:
+        logger.setLevel(level)
         return logger
 
     logger.setLevel(level)

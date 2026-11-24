@@ -214,8 +214,16 @@ class SettingsDialog(QDialog):
 
     # ------------------------------------------------------------------ accept
     def accept(self) -> None:
-        output_dir = expand_path(self.output_edit.text().strip())
-        if not is_writable_dir(output_dir, create=False):
+        try:
+            output_dir = expand_path(self.output_edit.text().strip())
+        except ValueError as exc:
+            QMessageBox.warning(
+                self,
+                tr("dialog.invalid_output.title"),
+                tr("dialog.invalid_output.body", path=exc),
+            )
+            return
+        if not is_writable_dir(output_dir, create=True):
             QMessageBox.warning(
                 self,
                 tr("dialog.invalid_output.title"),
